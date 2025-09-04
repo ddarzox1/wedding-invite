@@ -167,6 +167,28 @@
     @media (prefers-reduced-motion: reduce){
       .hero-bg,.hero-names{transition:none !important}
     }
+
+    .music-hint{
+    position: fixed;
+    z-index: 1100;          /* выше кнопки */
+    bottom: 92px;           /* 30 (отступ) + 50 (кнопка) + 12 */
+    right: 30px;            /* чуть левее центра кнопки */
+    font-size: 34px;
+    line-height: 1;
+    animation: hintBlink 1.2s ease-in-out infinite;
+    filter: drop-shadow(0 4px 10px rgba(0,0,0,.25));
+    pointer-events: none;   /* не мешает клику по кнопке */
+    user-select: none;
+    }
+    @keyframes hintBlink{
+    0%,100%{ opacity:.25; transform: translateY(0) }
+    50%    { opacity:1;   transform: translateY(-6px) }
+    }
+    .music-hint.is-hidden{ opacity:0; animation: none; display:none }
+
+    @media (max-width:768px){
+    .music-hint{ bottom: 78px; right: 20px; font-size: 26px; }
+    }
   </style>
 </head>
 <body>
@@ -175,6 +197,9 @@
     <source src="first-dance-ti-amo.mp3" type="audio/mpeg" />
   </audio>
   <div class="music-control" id="musicControl" title="Воспроизвести/Пауза"><span class="music-icon" id="musicIcon">🎵</span></div>
+
+  <!-- подсказка-стрелка -->
+<div class="music-hint" id="musicHint" aria-hidden="true">⬇️</div>
 
   <!-- Переключатель языков -->
   <div class="lang-switcher">
@@ -395,17 +420,47 @@
     const observer=new IntersectionObserver((entries)=>{entries.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');});},{threshold:.15});
     document.querySelectorAll('.fade-in').forEach(el=>observer.observe(el));
 
-    // Music control
-    const music=document.getElementById('backgroundMusic');
-    const musicBtn=document.getElementById('musicControl');
-    const musicIcon=document.getElementById('musicIcon');
-    let isPlaying=false;
-    musicBtn.addEventListener('click',async()=>{
-      try{
-        if(!isPlaying){await music.play();isPlaying=true;musicBtn.classList.add('playing');musicIcon.textContent='⏸️';}
-        else{music.pause();isPlaying=false;musicBtn.classList.remove('playing');musicIcon.textContent='🎵';}
-      }catch(e){console.warn('Autoplay prevented:',e);}
+    // --- Music control (исправлено) ---
+    const music = document.getElementById('backgroundMusic');
+    const musicBtn = document.getElementById('musicControl');
+    const musicIcon = document.getElementById('musicIcon');
+    const musicHint = document.getElementById('musicHint');
+
+    function showHint(visible){
+    if (!musicHint) return;
+    musicHint.classList.toggle('is-hidden', !visible);
+    }
+
+    // старт: если музыка на паузе — показываем стрелку
+    showHint(music?.paused !== false);
+
+    // клики по кнопке
+    musicBtn.addEventListener('click', async () => {
+    try{
+        if (music.paused) {
+        await music.play();                         // запускаем
+        musicBtn.classList.add('playing');
+        musicIcon.textContent = '⏸️';
+        showHint(false);                            // прячем сразу
+        } else {
+        music.pause();                              // ставим на паузу
+        musicBtn.classList.remove('playing');
+        musicIcon.textContent = '🎵';
+        showHint(true);                             // показываем
+        }
+    } catch(e){
+        console.warn('Autoplay prevented:', e);
+        // если не получилось сыграть — оставляем подсказку включённой
+        showHint(true);
+    }
     });
+
+    // события плеера на всякий случай (разные браузеры)
+    ['play','playing'].forEach(evt => music.addEventListener(evt, () => showHint(false)));
+    ['pause','ended'].forEach(evt => music.addEventListener(evt, () => showHint(true)));
+
+    // если вкладка вернулась из бэкграунда — синхронизируем состояние стрелки
+    document.addEventListener('visibilitychange', () => showHint(music.paused));
 
     // Persist language
     (function(){
